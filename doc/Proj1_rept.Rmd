@@ -1,0 +1,216 @@
+---
+title: "Happy Moments Spent with Different Generations"
+author: "Xuewei Li"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(stringr)
+library(RColorBrewer)
+library(wordcloud2)
+library(ggplot2)
+library(plotly)
+library(pheatmap)
+library(grid)
+library(shiny)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+count_text <- function(text){
+  count = paste(str_trim(text), sep = " ", collapse = " ") %>% 
+          strsplit(., split = ' ') %>% .[[1]] %>%
+          table(.) %>% data.frame(.)
+  return(count[order(count[,2], decreasing = TRUE),])
+}
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=3, fig.width=9.5}
+setwd('C:/Users/sharonsnow/Documents/GitHub/Spring2019-Proj1-xl2785/')
+demographic <- read.csv('data/demographic.csv',stringsAsFactors = FALSE)
+HappyM<-read.csv('output/processed_moments.csv',stringsAsFactors = FALSE) %>% 
+          merge(., demographic, by.x = 'wid', by.y = 'wid')
+allFreq = count_text(HappyM$text)
+wordcloud2(allFreq[1:100,],color = 'random-light', backgroundColor = "black")
+```
+
+#### According to the wordcloud of the whole text, it is easy to notice that sizable quantity of words are related to the people with specific relationship, like friend, son, wife and so on. Based on this finding, the following report will force on the happy moments with different people.
+
+## Part 1 Classification  
+#### In this report, people will be divided into three generations, **Juniority**, **Peer** and **Seniority**. We can use some typical words to grab the happy moments including them.   
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+J_pattern = "^son| son$| son |grandson|daughter|nephew|niece|child|kids"
+Juniority_row = grep(HappyM$text, pattern = J_pattern)
+Juniority = HappyM[Juniority_row, ]
+P_pattern = "friend|wife|husband|sister|brother|cousin|sibling"
+Peer_row = grep(HappyM$text, pattern = P_pattern)
+Peer = HappyM[Peer_row, ]
+S_pattern = "mom |dad |mother|father|grandpa|uncle|aunt|parent"
+Seniority_row = grep(HappyM$text, pattern = S_pattern)
+Seniority = HappyM[Seniority_row, ]
+```
+![](C:/Users/sharonsnow/Documents/GitHub/Spring2019-Proj1-xl2785/figs/Classification.png)
+
+## Part 2 Basic Features  
+### 2.1. The amount of each group   
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Amount = data.frame(level = c("Juniority","Peer","Seniority"), 
+                    times = c(nrow(Juniority),nrow(Peer),nrow(Seniority)),
+                    peo_num = c(length(unique(Juniority$wid)),  length(unique(Peer$wid)), length(unique(Seniority$wid))))
+p1 <- plot_ly(Amount, x = ~level, y = ~times, name = "HM") %>% add_bars()
+p2 <- plot_ly(Amount, x = ~level, y = ~peo_num, name = "people") %>% add_bars()
+subplot(p1, p2, margin = 0.05)
+```
+  
+#### The blue histogram reflects the number of the happy moments, and the orange one reflects the amount of people that refers to each group. Both figures show that people enjoy more happy moments with their peers and much less time with their seniorities.  
+  
+### 2.2. The length of the text  
+#### In this section, we will compare the length of the text when people describe their happy moments with different people.  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Juniority$nchar = nchar(Juniority$original_hm)
+Juniority$generation = "Juniority"
+Peer$nchar = nchar(Peer$original_hm)
+Peer$generation = "Peer"
+Seniority$nchar = nchar(Seniority$original_hm)
+Seniority$generation = "Seniority"
+All_generation = rbind(Juniority,Peer,Seniority)
+ggplot(All_generation)+
+  geom_violin(aes(x=generation,y=nchar,fill=generation,color=generation),alpha=0.5)+
+  ylim(0, quantile(All_generation$nchar,0.95))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+  
+#### In order to make it visible, we ignored 5% texts, which are extremely long. According to this diagram, there aren't significant differences among these groups. Only seniority group has more longer texts.  
+  
+### 2.3. Age  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+All_generation$age[grep(All_generation$age, pattern = "prefer not to say|D\rC!")] = NA
+All_generation$age[grep(All_generation$age, pattern = "60yrs")] = 60
+All_generation$age = as.integer(All_generation$age)
+ggplot(All_generation)+
+  geom_violin(aes(x=generation,y=age,fill=generation,color=generation),alpha=0.5)+
+  ylim(0,75)+
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+  
+#### The distribution of the age fits the common sense perfectly, that the elder people are more likely to have juniorities and spend happy moments with them. On the other hand, people who refer to their seniorities are probable to be younger.  
+  
+### 2.4. Gender influence  
+#### In the most situation, gender is an important factor that affects the way people get along.  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Juniority_gender =  prop.table(table(Juniority$gender)[-1])
+Peer_gender =  prop.table(table(Peer$gender)[-1])
+Seniority_gender =  prop.table(table(Seniority$gender)[-1])
+gender = c("f", "m", "o")
+p1 = ggplot()+ 
+  geom_bar(mapping = aes(x = '', y = Juniority_gender, fill = gender),stat = 'identity', position = 'stack') + coord_polar(theta = "y")+
+   geom_text(aes(x='',y=c(0.75,0.25,0),label =round(Juniority_gender,3)))
+p2 = ggplot()+
+  geom_bar(mapping = aes(x = '', y = Peer_gender, fill = gender),stat = 'identity', position = 'stack') + coord_polar(theta = "y")+
+  geom_text(aes(x='',y=c(0.75,0.25,0),label =round(Peer_gender,3)))
+p3 = ggplot()+
+  geom_bar(mapping = aes(x = '', y = Seniority_gender, fill = gender),stat = 'identity', position = 'stack') + coord_polar(theta = "y") + 
+  geom_text(aes(x='',y=c(0.75,0.25,0),label =round(Seniority_gender,3)))
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(2,4)))
+vplayout <- function(x,y){viewport(layout.pos.row = x, layout.pos.col = y)} 
+print(p1,vp = vplayout(1,1:2));print(p2,vp = vplayout(1,3:4));print(p3,vp = vplayout(2,2:3))
+```
+  
+#### From these pie charts, males and females perform equally when they get along with seniorities. However, females have more happy moments with their juniorities, and males tend to enjoy theirselves with peers.  
+
+## Part 3 Category  
+#### In the original data, happy moments have been divided into seven categories: **achievement**, **enjoy_the_moment**, **affection**, **bonding**, **leisure**, **nature**, **exercise**. All the texts have been grouped$^[1]$.   
+#### In this part, we can explore the relationship between generations and categories.  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+category <- prop.table(table(HappyM$predicted_category)) %>% 
+            rbind(.,prop.table(table(Juniority$predicted_category))) %>% 
+            rbind(.,prop.table(table(Peer$predicted_category))) %>% 
+            rbind(.,prop.table(table(Seniority$predicted_category)))
+row.names(category) <- c("Original", "Juniority", "Peer", "Seniority")
+```
+### 3.1. Comparation by categories    
+#### First of all, we compare how people spend their happy moments when they deal with the same generations.  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pheatmap(category,scale = "row", cluster_rows = FALSE)
+```
+  
+#### Obviously, in all of these three generation groups, **affection** takes up a large proportion.  It seems that when people get along with others happily, it's easy to feel affection.  
+#### Since **"affection"** column is very influential,  we just delete it to obvious the features of other categorie.  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pheatmap(category[,-2],scale = "row", cluster_rows = FALSE)
+```
+  
+#### From this heapmap, we can speculate that people attach importance to their juniorities' achievement. And when they get together with their peers,  they value this bonding. And people are easily to be proud of their seniorities' achievement and also enjoy the time with them in the nature.  
+  
+### 3.2. Comparation by generations  
+#### Now, we compare how generation influences each categories.  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pheatmap(category,scale = "column", cluster_rows = FALSE)
+```
+  
+#### Overall, there are more happy moments under the first three columns compared with original data, but less under the last four.  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pheatmap(category[-1,],scale = "column", cluster_rows = FALSE)
+```
+  
+#### Without the original data, the distinctions among the generations in each category are very significant.  
+  
+## Part 4 Key Words  
+#### In order to find more details, we can explore the exact words used most in each group.  
+
+### 4.1. Wordcloud
+#### **Juniority**  
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=3, fig.width=5}
+J_count = count_text(Juniority$text)
+J_dele = grep(J_count[,1],pattern = J_pattern)
+wordcloud2(J_count[-J_dele,][1:50,], shape = "diamond")
+```
+  
+#### **Peer**
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=3, fig.width=5}
+P_count = count_text(Peer$text)
+P_dele = grep(P_count[,1],pattern = P_pattern)
+wordcloud2(P_count[-P_dele,][1:50,], shape = "diamond")
+```
+  
+#### **Seniority**
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=3, fig.width=5}
+S_count = count_text(Seniority$text)
+S_dele = grep(S_count[,1],pattern = "mom|dad|mother|father|grandpa|uncle|aunt|parent")
+wordcloud2(S_count[-S_dele,][1:50,], shape = "diamond")
+```
+  
+#### Although these wordclouds can indicate the key words in each group, there are too many common word, such as day, time and so on, which are a little meaningless.    
+
+### Unique words in top 50
+#### To make the result more accurate, we can check the unique words in top 50 highest frequency ones.  
+#### **Juniority**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+setdiff(J_count[-J_dele,][1:50,1],union(P_count[1:50,1],S_count[1:50,1]))
+```
+#### **Peer**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+setdiff(P_count[-P_dele,][1:50,1],union(J_count[1:50,1],S_count[1:50,1]))
+```
+#### **Seniority**
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+setdiff(S_count[-S_dele,][1:50,1],union(P_count[1:50,1],J_count[1:50,1]))
+```
+  
+#### In terms of these words, we can conclude some features. For example, the happy moments with juniorities may happen on morning and it may be only a hug or smile. With peers, people often meet on a party or watch movie on weekends. When connected with seniorities, a phone calling or food cooking can be a happy time.  
+#### So many stories can be told.  
+
+## Summary  
+#### According to the exploration above, we can conclude that the happy moments with juniorities, peers and seniorities are very different in many aspects.  
+
+## Reference  
+#### [1]. *Akari Asai, Sara Evensen, Behzad Golshan, Alon Halevy, Vivian Li, Andrei Lopatenko, Daniela Stepanov, Yoshihiko Suhara, Wang-Chiew Tan, Yinzhan Xu, ``HappyDB: A Corpus of 100,000 Crowdsourced Happy Moments'', LREC '18, May 2018*
+
